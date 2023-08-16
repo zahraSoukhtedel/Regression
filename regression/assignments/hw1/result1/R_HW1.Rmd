@@ -1,0 +1,228 @@
+---
+title: "R_HW1"
+author: "Zahra Soukhtedel-98105138"
+date: "2023-04-28"
+output:
+  pdf_document:
+    latex_engine: xelatex
+encoding: "UTF-8"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
+```
+
+## Problem 1
+
+In order to see the intensity and weakness of Corona in different months, we have drawn the heat map of the additional deaths. To calculate the excess death rate, we first predict the death rate in the absence of Corona and compare it with the actual death rate and declare it as an excess death.
+
+To predict the amount of additional deaths, we use the data of 5 years before Corona and use the linear regression model, and if the p-value is high, we use the average mortality. (In case of excess death, we declare that the actual death rate has a significant difference of more than 1.96 sigma from the predicted death rate).
+
+libraries to be added:
+
+```{r}
+library(knitr)
+library(RColorBrewer)
+library(data.table)
+library(ggplot2)
+```
+
+function to calculate p-value:
+
+```{r}
+lmp <- function (modelobject) {
+  if (class(modelobject) != "lm") stop("Not an object of class 'lm' ")
+  f <- summary(modelobject)$fstatistic
+  p <- pf(f[1],f[2],f[3],lower.tail=F)
+  attributes(p) <- NULL
+  return(p)
+}
+```
+
+load data and prepare it for analyses(covid-data df to save comparable datas, and moral-num to save actual death values):
+
+
+```{r}
+d = fread('C:\\Users\\acer\\Documents\\R_hw1\\iranprovs_mortality_monthly.csv', encoding = 'UTF-8')
+d$ym_num = d$y + d$m / 12 - 1/24
+ds = d[, .(n = sum(n)), .(y, m, ym_num, prov)]
+ym_num_covid = 1398 + 10/12 - 1/24
+covid_data = data.frame(matrix(nrow = 31, ncol = 34))
+moral_num = data.frame(matrix(nrow = 31, ncol = 34))
+rownames(covid_data) = unique(ds[ym_num >= ym_num_covid]$prov)
+colnames(covid_data) = sort(unique(ds[ym_num >= ym_num_covid]$ym_num), decreasing = F)
+rownames(moral_num) = unique(ds[ym_num >= ym_num_covid]$prov)
+colnames(moral_num) = sort(unique(ds[ym_num >= ym_num_covid]$ym_num), decreasing = F)
+ym_num_start = ym_num_covid - 5
+```
+
+fill the covid-data data frame with computing values of each year-month-province with the model discusted above:
+
+```{r}
+for (M in c(1:12)) {
+  for (PROV in unique(d$prov)) {
+    dsm = ds[prov == PROV & m == M & ym_num > ym_num_start,]
+    dsm2fit = dsm[ym_num < ym_num_covid]
+    fit = lm(n ~ ym_num, dsm2fit)
+    if (lmp(fit) > 0.1){
+      dsm$n_predicted = mean(dsm2fit$n)
+      dsm$sd = sd(dsm2fit$n)
+    }else{
+      dsm$n_predicted = predict(fit ,dsm)
+      dsm$sd = summary(fit)$sigma
+    }
+    
+    dsm$moral_limit = dsm$n_predicted + 1.96 * dsm$sd
+    dsm$diff = (dsm$n - dsm$moral_limit)/dsm$n
+    dsm$diff[dsm$diff < 0] = 0
+    dsm$moral_value = (dsm$n - dsm$n_predicted)
+    dsm$moral_value[dsm$moral_value < 0] = 0
+    
+    dsm$ym_num[dsm$ym_num[dsm$ym_num]]
+    
+    for (ym_i in unique(dsm$ym_num[dsm$ym_num >= ym_num_covid])) {
+      covid_data[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$diff[1]
+      moral_num[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$moral_value[1]
+    }
+  }
+}
+```
+
+plot result heat-map:
+
+```{r}
+covid_matrix <- as.matrix(covid_data)
+for (i in c(1 : length(colnames(covid_matrix)))) {
+  colnames(covid_matrix)[i] = substr(colnames(covid_matrix)[i], start=1, stop=8)
+}
+col <- brewer.pal(9, "Blues")
+heatmap(covid_matrix, col=col, Colv = NA, Rowv = NA, scale="none")
+```
+
+As can be seen from the heat-map, it is easy to see the death waves of Corona.
+
+## Problem 2
+
+**What was the total number of additional deaths in the entire country?**
+
+the number of total number of additional deaths is shown as follows:
+```{r}
+sum(moral_num)
+```
+
+## Problem 3
+
+**What was the total number of additional deaths in each province?**
+
+the number of total number of additional deaths in each province is shown as follows:
+```{r}
+rowSums(moral_num)
+```
+
+## Problem 4
+
+**Which provinces have been more successful in controlling the disease? Is there a significant difference between the provinces?**
+
+first we compare normalized death sum in provinces, we have:
+
+
+```{r}
+sort(rowSums(covid_data))
+```
+from data above we can conclude that most successful provinces are {gilan, south khorasan, chaharmaha, sistanl, now we will compare it with actual death values :
+```{r}
+sort(rowSums(moral_num))
+
+
+```
+
+One of the factors that can bias our conclusions is the elderly people in the society, we eliminate their influence, that is, we remove the data related to elderly people from our data and act as before and the normalized amount of extra deaths in the province We compare different.
+
+```{r}
+ds = d[, .(n = sum(n)), .(y, m, ym_num, prov, age_group)]
+for (M in c(1:12)) {
+  for (PROV in unique(d$prov)) {
+    dsm = ds[prov == PROV & m == M & ym_num > ym_num_start & age_group <= 4, ]
+    dsm2fit = dsm[ym_num < ym_num_covid]
+    fit = lm(n ~ ym_num, dsm2fit)
+    if (lmp(fit) > 0.1){
+      dsm$n_predicted = mean(dsm2fit$n)
+      dsm$sd = sd(dsm2fit$n)
+    }else{
+      dsm$n_predicted = predict(fit ,dsm)
+      dsm$sd = summary(fit)$sigma
+    }
+    
+    dsm$moral_limit = dsm$n_predicted + 1.96 * dsm$sd
+    dsm$diff = (dsm$n - dsm$moral_limit)/dsm$n
+    dsm$diff[dsm$diff < 0] = 0
+    dsm$moral_value = (dsm$n - dsm$n_predicted)
+    dsm$moral_value[dsm$moral_value < 0] = 0
+    
+    dsm$ym_num[dsm$ym_num[dsm$ym_num]]
+    
+    for (ym_i in unique(dsm$ym_num[dsm$ym_num >= ym_num_covid])) {
+      covid_data[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$diff[1]
+      moral_num[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$moral_value[1]
+    }
+  }
+}
+
+```
+
+now in new model we will check the normalized rate of death.
+
+```{r}
+sort(rowSums(covid_data))
+```
+here we can see death rate of young people (younger than 40) in different provinces are like above, so setting percent -of young people died over Corona over number of all young dead people- as our base.
+
+if we took elder people as our base we have:
+```{r}
+ds = d[, .(n = sum(n)), .(y, m, ym_num, prov, age_group)]
+for (M in c(1:12)) {
+  for (PROV in unique(d$prov)) {
+    dsm = ds[prov == PROV & m == M & ym_num > ym_num_start & age_group > 4, ]
+    dsm2fit = dsm[ym_num < ym_num_covid]
+    fit = lm(n ~ ym_num, dsm2fit)
+    if (lmp(fit) > 0.1){
+      dsm$n_predicted = mean(dsm2fit$n)
+      dsm$sd = sd(dsm2fit$n)
+    }else{
+      dsm$n_predicted = predict(fit ,dsm)
+      dsm$sd = summary(fit)$sigma
+    }
+    
+    dsm$moral_limit = dsm$n_predicted + 1.96 * dsm$sd
+    dsm$diff = (dsm$n - dsm$moral_limit)/dsm$n
+    dsm$diff[dsm$diff < 0] = 0
+    dsm$moral_value = (dsm$n - dsm$n_predicted)
+    dsm$moral_value[dsm$moral_value < 0] = 0
+    
+    dsm$ym_num[dsm$ym_num[dsm$ym_num]]
+    
+    for (ym_i in unique(dsm$ym_num[dsm$ym_num >= ym_num_covid])) {
+      covid_data[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$diff[1]
+      moral_num[PROV, as.character(ym_i)] = dsm[ym_num == ym_i & prov == PROV]$moral_value[1]
+    }
+  }
+}
+sort(rowSums(covid_data))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
