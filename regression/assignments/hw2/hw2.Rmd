@@ -1,0 +1,461 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Zahra Soukhtedel 98105138
+
+
+```{r}
+library(data.table)
+library(ggplot2)
+```
+
+```{r}
+d1 = fread('C:/Users/acer/Desktop/New folder/diabetes_012_health_indicators_BRFSS2015.csv', encoding = 'UTF-8')
+d2 = fread('C:/Users/acer/Desktop/New folder/diabetes_binary_5050split_health_indicators_BRFSS2015.csv', encoding = 'UTF-8')
+d3 = fread('C:/Users/acer/Desktop/New folder/diabetes_binary_health_indicators_BRFSS2015.csv', encoding = 'UTF-8')
+```
+
+### Q1: we do some EDA on our data to indicate that our features are good enough to have a model for predicting or not.
+
+
+```{r}
+head(d1)
+```
+```{r}
+str(d1)
+```
+```{r}
+summary(d1)
+```
+
+```{r}
+names(d1)
+```
+```{r}
+names(d2)
+```
+```{r}
+names(d3)
+```
+
+
+
+
+Second investigating the contributition of the predictors as risk factors for diabetes prediction.
+
+
+#### Age:
+
+```{r}
+ggplot(d1, aes(Age, group = Diabetes_012, color = Diabetes_012)) + geom_boxplot(alpha = 0.75)
+```
+
+```{r}
+ggplot(d2, aes(Age, group = Diabetes_binary, color = Diabetes_binary)) + geom_boxplot(alpha = 0.75)
+```
+
+```{r}
+ggplot(d3, aes(Age, group = Diabetes_binary, color = Diabetes_binary)) + geom_boxplot(alpha = 0.75)
+```
+
+
+
+This with our prior knowledge that advanced age is a significant risk factor for diabetes and prediabetes. Consequently, the prevalence of diabetes and prediabetes is higher among the elderly compared to younger
+
+
+#### BMI
+
+```{r}
+d1$Diabetes_012 = as.factor(d1$Diabetes_012)
+d2$Diabetes_binary = as.factor(d2$Diabetes_binary)
+d3$Diabetes_binary = as.factor(d3$Diabetes_binary)
+```
+
+
+
+```{r}
+ggplot(d1, aes(BMI, fill=Diabetes_012)) + geom_density(alpha=0.75)
+```
+
+```{r}
+ggplot(d2, aes(BMI, fill=Diabetes_binary)) + geom_density(alpha=0.75)
+```
+```{r}
+ggplot(d3, aes(BMI, fill=Diabetes_binary)) + geom_density(alpha=0.75)
+```
+From the plots above, It appears that people with lower BMI scores are less susceptible to Diabetes, and those with prediabetes or diabetes have very similar BMI scores. Their histograms can also be compared for further analysis.
+
+```{r}
+ggplot(d1, aes(BMI, fill=Diabetes_012)) + geom_histogram(alpha=0.75) + facet_grid(Diabetes_012 ~ .)
+```
+
+We understand that a histogram displays the frequency of values within each range, whereas a density plot illustrates the proportion of values within each range. Given that the data is unbalanced, we can accurately compare them using either a density plot or a histogram with 'free_y'. 
+
+In general, the most common BMI distribution falls between 22 and 30, and it is a significant risk factor for the development of diabetes. A higher BMI is associated with an increased likelihood of developing the disease.
+
+
+#### Education
+
+```{r}
+ggplot(d1, aes(x=Diabetes_012, y=Education)) + geom_violin(trim=FALSE)
+```
+```{r}
+ggplot(d2, aes(x=Diabetes_binary, y=Education)) + geom_violin(trim=FALSE)
+```
+
+#### NoDocbcCost
+
+```{r}
+d1$one = 1
+ds = d1[, .(n = sum(one)), .(Diabetes_012, NoDocbcCost)]
+ds[, n_total := sum(n), .(NoDocbcCost)]
+ds[, n_percent := n/n_total]
+ggplot(ds, aes(as.factor(NoDocbcCost), n_percent, fill = Diabetes_012)) + geom_bar(stat = 'identity',)
+```
+There appears to be a correlation between prediabetes and diabetes with the factor of financial constraints in accessing healthcare. The question "Was there a time in the past 12 months when you needed to see a doctor but could not because of cost? 0 = no, 1 = yes" aligns with this relationship, which is logical.
+
+
+
+
+```{r}
+ggplot(d1, aes(x=Diabetes_012, y=GenHlth)) + 
+  geom_violin(trim=FALSE)
+```
+
+```{r}
+ggplot(d2, aes(x=Diabetes_binary, y=GenHlth)) + 
+  geom_violin(trim=FALSE)
+```
+The health states of patients are assessed based on their diabetes status using a rating scale from 1 to 5, with 1 representing the best state and 5 indicating the worst. Upon analyzing the distribution, it is evident that there is a notable disparity between the densities of class 0 and class 1. Specifically, the density of class 0 is more concentrated within the range of 1 to 3, whereas the density of class 1 is more widely spread across the range of 1 to 5. This suggests that overall, the health conditions of diabetic patients tend to be well managed.
+
+
+#### Income 
+
+```{r}
+ggplot(d1, aes(x=Diabetes_012, y=Income)) + geom_violin(trim=FALSE)
+```
+
+```{r}
+ggplot(d2, aes(x=Diabetes_binary, Income)) + geom_violin(trim=FALSE)
+```
+
+When examining the relationship between patient income and diabetes status, it becomes apparent that there is an increase in the density of the plot with higher income levels. This suggests that as income rises, the likelihood of developing the disease also increases. However, for individuals with class 1 diabetes, the plot is evenly distributed across a scale of 1 to 8, indicating that the disease affects all income groups. Nonetheless, there is a higher concentration within the income levels of 5 to 8.
+
+
+### Q2: Feature Selection
+
+#### Random Foresrt
+Random forest does feature selection, that best explains the variance in the response variable.
+
+```{r}
+# install.packages("party")
+library(party)
+Diabetes_binary <- as.factor(d2$Diabetes_binary)
+cf1 <- cforest(as.factor(Diabetes_binary) ~ . , data= d2, control=cforest_unbiased(mtry=3,ntree=100))
+varimp(cf1)
+varimp(cf1, conditional=TRUE) 
+varimpAUC(cf1)  
+```
+
+In the first scenario, it is anticipated that GenHlth, High BP, BMI, Age, High Chol, DiffWalk, and Income play significant roles as features. However, when taking into account the correlations and imbalanced classes in the second and third scenarios, the results do not deviate significantly.
+
+#### Step-wise Regression
+If you have a substantial number of predictors (more than 15), divide the inputData into chunks of 10 predictors. Each chunk should include the responseVar variable.
+
+```{r}
+d2 = fread('C:/Users/acer/Desktop/New folder/diabetes_binary_5050split_health_indicators_BRFSS2015.csv', encoding = 'UTF-8')
+Diabetes_binary <- as.factor(d2$Diabetes_binary)
+base.mod <- lm(Diabetes_binary ~ 1 , data= d2)  
+all.mod <- lm(Diabetes_binary ~ . , data= d2)
+stepMod <- step(base.mod, scope = list(lower = base.mod, upper = all.mod), direction = "both", trace = 0, steps = 1000)
+shortlistedVars <- names(unlist(stepMod[[1]])) 
+shortlistedVars <- shortlistedVars[!shortlistedVars %in% "(Intercept)"]   
+print(shortlistedVars)
+```
+
+The output may contain levels within categorical variables because the 'stepwise' technique is based on linear regression, as demonstrated earlier. As anticipated, features such as GenHlth, HighBp, BMI, Age, HighChol, etc., hold greater significance. It's important to note that due to the step-wise feature selection approach, we do not expect the absolute best model, but rather a model and result that closely approximate the optimal one.
+
+#### MARS
+The earth package incorporates variable importance using Generalized Cross Validation (GCV), the number of subset models in which the variable appears (subsets), and the residual sum of squares (RSS).
+
+```{r}
+library(earth)
+mars <- earth(as.factor(Diabetes_binary) ~ ., data=d2) 
+ev <- evimp (mars)
+par(mar=c(1,1,1,1))
+plot(ev)
+```
+
+##### Rank Features By Importance
+To determine the significance of features in a dataset, a model can be constructed using the available data. Certain techniques, such as decision trees, provide an inherent mechanism to assess variable importance. However, for other algorithms, the importance of variables can be estimated by conducting a ROC curve analysis for each attribute.
+
+In the following example, the Pima Indians Diabetes dataset is loaded, and a Learning Vector Quantization (LVQ) model is constructed. The varImp function is employed to estimate the importance of variables, which is then displayed and visualized through printing and plotting.
+
+```{r}
+library(caret)
+control <- trainControl(method="cv", number=4, allowParallel = TRUE)
+model <- train(as.factor(Diabetes_binary)~., data=d2, method="lvq", preProcess="scale", trControl=control)
+imp <- varImp(model, scale=FALSE)
+plot(imp)
+print(imp)
+```
+
+##### Feature Selection
+To identify the attributes necessary for building an accurate model, automatic feature selection methods can be employed. These methods involve building multiple models using different subsets of a dataset and determining which attributes are essential and which are not.
+
+One widely used automatic feature selection method is Recursive Feature Elimination (RFE), which is available in the caret R package.
+
+During each iteration of RFE, a Random Forest algorithm is utilized to evaluate the model. The algorithm is set up to explore all possible combinations of attribute subsets, allowing for a comprehensive analysis.
+
+```{r}
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+results <- rfe(d2[,2:22], d2[,1], sizes=c(1:21), rfeControl=control)
+print(results)
+predictors(results)
+plot(results, type=c("g", "o"))
+```
+
+```{r}
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+#### Feature selection
+```{r}
+install.packages("ROCR")
+library(ROCR)
+```
+
+```{r}
+library(caTools)
+library(dplyr)
+data = data.frame(fread('C:/Users/acer/Desktop/New folder/diabetes_binary_5050split_health_indicators_BRFSS2015.csv', encoding = 'UTF-8'))
+sample_data = sample.split(data, SplitRatio = 0.8)
+train_data <- subset(data, sample_data == TRUE)
+test_data <- subset(data, sample_data == FALSE)
+logistic_model <- glm(Diabetes_binary ~., data=train_data)
+predict_reg <- predict(logistic_model, test_data, type="response")
+predict_reg <- ifelse(predict_reg > 0.5, 1, 0)
+missing_classerr <- mean(predict_reg != test_data$Diabetes_binary)
+print(paste('Accuracy =', 1 - missing_classerr))
+```
+```{r}
+
+```
+
+
+### Q3
+
+Yes, feature subset selection plays a crucial role in identifying and eliminating irrelevant and redundant information from the dataset. By doing so, we can reduce the data's dimensionality, enabling learning algorithms to operate more efficiently and effectively. The methods discussed earlier provide us with the means to select the most significant features for our models.
+
+I have decided to include the following variables in our model: GenHlth, HighBP, BMI, Age, HighChol, HvyAlcoholConsump, and Income. These variables have been deemed important based on their relevance and impact on the model's performance.
+
+```{r}
+library(plyr)
+library(readr)
+library(dplyr)
+library(caret)
+```
+
+```{r}
+d2 = fread('C:/Users/acer/Desktop/New folder/diabetes_binary_5050split_health_indicators_BRFSS2015.csv', encoding = 'UTF-8')
+d2 = d2[,c("Diabetes_binary","GenHlth", "HighBP", "BMI", "Age", "HighChol", "HvyAlcoholConsump", "Income")]
+d2
+```
+
+
+```{r}
+glimpse(d2)
+```
+
+# EDA 
+
+Checking if there is a null value in data
+
+```{r}
+# Checking for missing values 
+sum(is.na(d2))
+```
+
+Now let's factorize categorical variables
+
+```{r}
+d2[,1:8] <- lapply(d2[,1:8] , as.factor)
+d2[,4] <- lapply(d2[,4] , as.numeric)
+glimpse(d2)
+
+```
+
+### Split dataset into Valodation and (training versus test)
+
+To assess the effectiveness of our model, we employ statistical techniques to gauge its accuracy on unseen data. Furthermore, we aim to obtain a more precise estimation of the best model's accuracy by evaluating it on real unseen data. This involves withholding a portion of the data from the algorithms' view and using it as a separate source to independently evaluate the actual accuracy of the top-performing model.
+
+```{r}
+#install.packages("caTools")
+library(caTools)
+d2 = data.frame(d2)
+sample_data = sample.split(d2, SplitRatio = 0.8)
+data <- subset(d2, sample_data == TRUE)
+validation <- subset(d2, sample_data == FALSE)
+```
+
+#### Building Models
+We will use for different models: Logistic Regression, ROC, Random Forest, NAive Bayes and Decision Tree to train our model, and we will check the accuracy each model gave us.
+
+```{r}
+cv_folds <- createFolds(d2$Diabetes_binary, k = 5, returnTrain = TRUE)
+tuneGrid <- expand.grid(.mtry = c(1 : 10))
+
+ctrl <- trainControl(method = "cv",
+                     number = 5,
+                     search = 'grid',
+                     classProbs = TRUE,
+                     savePredictions = "final",
+                     index = cv_folds,
+                     summaryFunction = twoClassSummary) #in most cases a better summary for two class problems 
+
+metric = "ROC"
+```
+
+#### Logistic Regression
+```{r}
+set.seed(7)
+fit.lr <- train(make.names(Diabetes_binary)~., data=d2, method="glm", metric=metric, trControl=ctrl)
+```
+
+```{r}
+fit.lr
+```
+
+##### Random Forest
+```{r}
+set.seed(7)
+fit.rf <- train(make.names(Diabetes_binary)~., data=d2, method="rf", metric=metric, trControl=ctrl, ntree = 40,
+                       nodesize = c(1, 5))
+
+```
+
+```{r}
+fit.rf
+```
+
+##### Decision Tree
+```{r}
+set.seed(7)
+fit.tree <- train(make.names(Diabetes_binary)~., data=d2, method="rpart", metric=metric, trControl=ctrl)
+fit.tree
+```
+```{r}
+# plot the model
+plot(fit.tree$finalModel, uniform=TRUE,
+     main="Classification Tree")
+text(fit.tree$finalModel, all=TRUE, cex=.8)
+```
+
+##### Naive Bayes
+```{r}
+set.seed(7)
+fit.nb <- train(make.names(Diabetes_binary)~., data=d2, method="nb", metric=metric, trControl=ctrl)
+fit.nb
+```
+
+### Model Selection
+We employed the ROC metric to assess and compare the models, enabling us to determine the superior one among the rest. Additionally, we have the option to calculate their accuracy or other metrics. As observed, we can compare their CP scores or utilize cross-validation (CV) to identify the optimal model.
+
+```{r}
+results <- resamples(list(DT=fit.tree, LR=fit.lr, RF=fit.rf ))
+summary(results)
+```
+```{r}
+dotplot(results)
+```
+
+
+
+Based on the observed accuracy and ROC performance, it appears that LR (the generalized linear model) achieves the highest results, followed by RF. However, it is worth noting that better outcomes can be achieved by running RF with a larger number of trees. Due to time constraints in working with caret on large datasets, only a small number of trees were utilized for this analysis.
+
+```{r}
+predictions <- predict(fit.lr, validation)
+confusionMatrix(as.factor(predictions), validation$Diabetes_binary)
+```
+
+Both GLM (or LR) and RF demonstrate comparable performance, with GLM slightly outperforming RF. We can proceed with either of them, but if we are compelled to choose just one, LR appears to be the slightly superior option.
+
+### Q4
+
+```{r}
+data = data.frame(d2)
+sample_data = sample.split(data, SplitRatio = 0.8)
+train_val <- subset(data, sample_data == TRUE)
+test <- subset(data, sample_data == FALSE)
+sample_data = sample.split(train_val, SplitRatio = 0.8)
+train <- subset(train_val, sample_data == TRUE)
+val <- subset(train_val, sample_data == FALSE)
+
+logistic_model <- function(alpha){ 
+    logistic_model <- glm(Diabetes_binary~. , data = train, family = "binomial") 
+    predict_reg <- predict(logistic_model, val , type = "response") 
+    predictions <- ifelse(predict_reg >alpha, 1, 0) 
+ 
+    confusionMatrix <- confusionMatrix(as.factor(predictions), as.factor(val$Diabetes)) 
+    print(paste("alpha:", alpha)) 
+    print(paste("Accuracy:", confusionMatrix$overall['Accuracy'])) 
+    print(paste("Precision:", confusionMatrix$byClass['Pos Pred Value']))    
+}
+
+
+start = 0.2
+end = 0.9
+step = 0.05 
+mylist = seq(start, end, by = step) 
+for (i in mylist){ 
+    print(paste("alpha: ", i)) 
+    logistic_model(i) 
+}
+```
+
+sutable alpha is alpha  = 0.45 
+```{r}
+alpha  = 0.45 
+logistic_model <- glm(Diabetes_binary ~ . , data = train_val, family = "binomial") 
+predict_reg <- predict(logistic_model, test , type = "response") 
+predictions <- ifelse(predict_reg >alpha, 1, 0) 
+ 
+confusionMatrix <- confusionMatrix(as.factor(predictions), as.factor(test$Diabetes)) 
+print(paste("alpha:", alpha)) 
+print(paste("Accuracy:", confusionMatrix$overall['Accuracy'])) 
+print(paste("Precision:", confusionMatrix$byClass['Pos Pred Value']))
+```
+
+
+
+### Q5
+In this section, we aim to select a model that offers lower computation costs after it is constructed. Generally, non-parametric models like K-nearest neighbors (KNN) are not suitable due to the computational challenges involved in calculating distances for each observation in large spaces. On the other hand, parametric models such as neural networks (NNs) and decision trees (DTs) tend to perform better.
+
+Decision trees have several advantages in terms of speed and efficiency during testing. During inference, test inputs simply need to traverse down the tree until reaching a leaf node, where the prediction is based on the majority label associated with that leaf. This process is comparatively fast. Additionally, decision trees do not require a specific metric because they make splits based on feature thresholds rather than distances. This attribute distinguishes them from KNN, which relies heavily on distance calculations and cannot automatically capture feature interactions.
+
+The speed advantage of decision trees over KNN is primarily attributed to KNN's expensive real-time execution. Decision trees offer faster predictions, making them more preferable in scenarios where efficiency is crucial.
+
+However, when it comes to prediction accuracy, logistic regression, particularly in terms of F1 score, often performs better. Logistic regression is typically superior in this regard.
+
+Nevertheless, decision trees excel over logistic regression in certain situations. When working with large datasets or when the relationships between different features and the target variable are complex and nonlinear, decision trees prove to be more effective. They can capture intricate patterns and interactions in the data, providing superior performance in such cases.
+
+
+
+
+
+
+
+
+
+
